@@ -75,7 +75,6 @@ export function TariffEditor() {
       ...b,
       contractRate: toContractValue(b.ratePerUnit),
     }));
-    // eslint-disable-next-line no-console
     console.warn("Publishing tariff bands:", contractBands);
     await new Promise((r) => setTimeout(r, 2000));
     setPublishing(false);

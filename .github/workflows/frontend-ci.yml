@@ -54,4 +54,5 @@ jobs:
       - name: Run Playwright tests
         run: npx playwright test
       - name: Stop dev server
-        run: kill $(lsof -t -i:3000) || true
+        if: always()
+        run: kill $(lsof -t -i:3000) 2>/dev/null || true

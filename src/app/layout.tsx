@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   description:
     "Enterprise-grade spatial utility mapping and Decentralized Physical Infrastructure Network management dashboard.",
   manifest: "/manifest.json",
+};
+
+export const viewport: Viewport = {
   themeColor: "#0a0a0a",
 };
 
