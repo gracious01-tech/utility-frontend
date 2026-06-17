@@ -103,6 +103,22 @@ export async function cacheClear(): Promise<void> {
   }
 }
 
+export async function cacheClearByPrefix(prefix: string): Promise<void> {
+  try {
+    const db = await getDb();
+    const keys = await db.getAllKeys("kv");
+    const tx = db.transaction("kv", "readwrite");
+    for (const key of keys) {
+      if (String(key).startsWith(prefix)) {
+        tx.store.delete(key);
+      }
+    }
+    await tx.done;
+  } catch {
+    // silently fail
+  }
+}
+
 export async function cacheKeys(prefix?: string): Promise<string[]> {
   try {
     const db = await getDb();
