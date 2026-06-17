@@ -23,6 +23,7 @@ const defaultConfig: ApiConfig = {
 };
 
 let sessionToken: string | null = null;
+const activeControllers = new Set<AbortController>();
 
 export function setSessionToken(token: string | null) {
   sessionToken = token;
@@ -30,6 +31,13 @@ export function setSessionToken(token: string | null) {
 
 export function getSessionToken(): string | null {
   return sessionToken;
+}
+
+export function abortAllRequests(): void {
+  for (const ctrl of activeControllers) {
+    ctrl.abort();
+  }
+  activeControllers.clear();
 }
 
 async function request<T>(
@@ -41,6 +49,7 @@ async function request<T>(
   const cfg = { ...defaultConfig, ...config };
   const url = `${cfg.baseUrl}${path}`;
   const controller = new AbortController();
+  activeControllers.add(controller);
   const timeoutId = setTimeout(() => controller.abort(), cfg.timeout);
 
   try {
@@ -83,6 +92,8 @@ async function request<T>(
       error: (err as Error).message || "Network error",
       status: 0,
     };
+  } finally {
+    activeControllers.delete(controller);
   }
 }
 
