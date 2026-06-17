@@ -24,10 +24,39 @@ interface UseRetryQueueReturn {
 }
 
 const RETRY_DELAYS = [1000, 5000, 15000, 30000, 60000];
+const STORAGE_KEY = "retry-queue-state";
+
+// Serialize queue for localStorage
+function serializeQueue(queue: QueuedTransaction[]): string {
+  return JSON.stringify(queue);
+}
+
+// Deserialize queue from localStorage
+function deserializeQueue(stored: string | null): QueuedTransaction[] {
+  if (!stored) return [];
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return [];
+  }
+}
 
 export function useRetryQueue(): UseRetryQueueReturn {
-  const [queue, setQueue] = useState<QueuedTransaction[]>([]);
+  // Initialize queue from localStorage
+  const [queue, setQueue] = useState<QueuedTransaction[]>(() => {
+    if (typeof window === "undefined") return [];
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return deserializeQueue(stored);
+  });
+  
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // Persist queue to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(STORAGE_KEY, serializeQueue(queue));
+    }
+  }, [queue]);
 
   const cleanupTimer = useCallback((id: string) => {
     const timer = timersRef.current.get(id);
@@ -40,11 +69,11 @@ export function useRetryQueue(): UseRetryQueueReturn {
   const enqueue = useCallback((id: string, maxRetries = 5) => {
     setQueue((prev) => {
       if (prev.find((t) => t.id === id)) return prev;
-      return [
+      const newQueue = [
         {
           id,
           txHash: null,
-          status: "pending",
+          status: "pending" as const,
           retryCount: 0,
           maxRetries,
           error: null,
@@ -52,6 +81,7 @@ export function useRetryQueue(): UseRetryQueueReturn {
         },
         ...prev,
       ];
+      return newQueue;
     });
   }, []);
 
@@ -77,27 +107,44 @@ export function useRetryQueue(): UseRetryQueueReturn {
 
   const markFailed = useCallback(
     (id: string, error: string) => {
-      const tx = queue.find((t) => t.id === id);
-      if (!tx) return;
-      if (tx.retryCount < tx.maxRetries) {
-        const delay =
-          RETRY_DELAYS[Math.min(tx.retryCount, RETRY_DELAYS.length - 1)];
-        const timer = setTimeout(() => {
-          setQueue((prev) =>
-            prev.map((t) =>
-              t.id === id
-                ? { ...t, retryCount: t.retryCount + 1, status: "pending" as const, error: null }
-                : t
-            )
-          );
-        }, delay);
-        timersRef.current.set(id, timer);
-      }
-      setQueue((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, status: "failed" as const, error } : t))
-      );
+      setQueue((prev) => {
+        const tx = prev.find((t) => t.id === id);
+        if (!tx) return prev;
+
+        // First, mark as failed
+        const updatedQueue = prev.map((t) =>
+          t.id === id ? { ...t, status: "failed" as const, error } : t
+        );
+
+        // If retries are available, schedule auto-retry
+        if (tx.retryCount < tx.maxRetries) {
+          const delay = RETRY_DELAYS[Math.min(tx.retryCount, RETRY_DELAYS.length - 1)];
+          
+          // Clean up any existing timer for this transaction
+          cleanupTimer(id);
+          
+          const timer = setTimeout(() => {
+            setQueue((current) =>
+              current.map((t) =>
+                t.id === id
+                  ? {
+                      ...t,
+                      retryCount: t.retryCount + 1,
+                      status: "pending" as const,
+                      error: null,
+                    }
+                  : t
+              )
+            );
+          }, delay);
+          
+          timersRef.current.set(id, timer);
+        }
+
+        return updatedQueue;
+      });
     },
-    [queue, cleanupTimer]
+    [cleanupTimer]
   );
 
   const retry = useCallback(async (id: string) => {
