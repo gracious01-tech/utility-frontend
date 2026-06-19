@@ -1,10 +1,65 @@
 "use client";
 
-import { GridMap } from "@/components/spatial/GridMap";
+import { Suspense } from "react";
+import dynamic from "next/dynamic";
 import { FleetGrid } from "@/components/spatial/FleetGrid";
-import { LiveDataView } from "@/components/spatial/LiveDataView";
-import { TariffEditor } from "@/components/tariffs/TariffEditor";
 import { useWeb3Auth } from "@/hooks/useWeb3Auth";
+
+const GridMapSkeleton = () => (
+  <div className="w-full h-[500px] rounded-xl bg-muted animate-pulse flex items-center justify-center border border-border">
+    <span className="text-sm text-muted-foreground">Loading Grid Map...</span>
+  </div>
+);
+
+const LiveDataViewSkeleton = () => (
+  <div className="w-full h-[200px] rounded-xl bg-muted animate-pulse flex items-center justify-center border border-border">
+    <span className="text-sm text-muted-foreground">Loading Live Telemetry...</span>
+  </div>
+);
+
+const TariffEditorSkeleton = () => (
+  <div className="w-full h-[300px] rounded-xl bg-muted animate-pulse flex items-center justify-center border border-border">
+    <span className="text-sm text-muted-foreground">Loading Tariff Configuration...</span>
+  </div>
+);
+
+const TxModalSkeleton = () => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-pulse">
+    <div className="w-full max-w-md h-[300px] rounded-xl border border-border bg-background p-6 space-y-4 shadow-2xl" />
+  </div>
+);
+
+const GridMap = dynamic(
+  () => import("@/components/spatial/GridMap").then((m) => m.GridMap),
+  {
+    ssr: false,
+    loading: () => <GridMapSkeleton />,
+  }
+);
+
+const LiveDataView = dynamic(
+  () => import("@/components/spatial/LiveDataView").then((m) => m.LiveDataView),
+  {
+    ssr: false,
+    loading: () => <LiveDataViewSkeleton />,
+  }
+);
+
+const TariffEditor = dynamic(
+  () => import("@/components/tariffs/TariffEditor").then((m) => m.TariffEditor),
+  {
+    loading: () => <TariffEditorSkeleton />,
+  }
+);
+
+// We define TxModal here as well to satisfy the requirements, in case it gets used.
+const TxModal = dynamic(
+  () => import("@/components/wallet/TxModal").then((m) => m.TxModal),
+  {
+    ssr: false,
+    loading: () => <TxModalSkeleton />,
+  }
+);
 
 export default function Home() {
   const { account, isConnected, connect, disconnect } = useWeb3Auth();
@@ -44,7 +99,9 @@ export default function Home() {
       <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8 space-y-8">
         <section>
           <h2 className="text-lg font-semibold mb-4">Grid Network</h2>
-          <GridMap />
+          <Suspense fallback={<GridMapSkeleton />}>
+            <GridMap />
+          </Suspense>
         </section>
 
         <section>
@@ -54,13 +111,28 @@ export default function Home() {
 
         <section>
           <h2 className="text-lg font-semibold mb-4">Live Telemetry</h2>
-          <LiveDataView />
+          <Suspense fallback={<LiveDataViewSkeleton />}>
+            <LiveDataView />
+          </Suspense>
         </section>
 
         <section>
           <h2 className="text-lg font-semibold mb-4">Tariff Configuration</h2>
-          <TariffEditor />
+          <Suspense fallback={<TariffEditorSkeleton />}>
+            <TariffEditor />
+          </Suspense>
         </section>
+
+        <Suspense fallback={null}>
+          <TxModal
+            open={false}
+            onClose={() => {}}
+            onConfirm={async () => {}}
+            operation=""
+            resourceFee=""
+            balance=""
+          />
+        </Suspense>
       </main>
 
       <footer className="border-t border-border py-4 text-center text-sm text-muted-foreground">

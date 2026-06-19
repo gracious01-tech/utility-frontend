@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Keypair } from "@stellar/stellar-sdk";
+import type { Keypair } from "@stellar/stellar-sdk";
 
 interface AuthSession {
   address: string;
@@ -32,9 +32,11 @@ export function useWeb3Auth(): UseWeb3AuthReturn {
         const parsed: AuthSession = JSON.parse(stored);
         if (parsed.expiresAt > Date.now()) {
           setSession(parsed);
-          keypairRef.current = Keypair.fromSecret(
-            localStorage.getItem("utility-auth-secret") || ""
-          );
+          import("@stellar/stellar-sdk").then(({ Keypair: StellarKeypair }) => {
+            keypairRef.current = StellarKeypair.fromSecret(
+              localStorage.getItem("utility-auth-secret") || ""
+            );
+          });
         } else {
           localStorage.removeItem("utility-auth-session");
           localStorage.removeItem("utility-auth-secret");
@@ -54,7 +56,8 @@ export function useWeb3Auth(): UseWeb3AuthReturn {
   }, []);
 
   const connect = useCallback(async () => {
-    const kp = Keypair.random();
+    const { Keypair: StellarKeypair } = await import("@stellar/stellar-sdk");
+    const kp = StellarKeypair.random();
     keypairRef.current = kp;
     const challenge = `Utility-Protocol Auth: ${Date.now()}`;
     const buffer = Buffer.from(challenge, "utf-8");
