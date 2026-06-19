@@ -28,7 +28,7 @@ export function useEscrow<TData = unknown>(
   onRollback: (data: TData) => Promise<void>
 ): UseEscrowReturn<TData> {
   const [mutations, setMutations] = useState<OptimisticMutation<TData>[]>([]);
-  const pendingRef = useRef(new Set<string>());
+  const activeMutationsRef = useRef<Set<string>>(new Set());
 
   const submit = useCallback(
     async (data: TData) => {
@@ -42,12 +42,13 @@ export function useEscrow<TData = unknown>(
         confirmedAt: null,
       };
 
-      setMutations((prev) => [mutation, ...prev]);
-      pendingRef.current.add(id);
+      setMutations((prev) => [mutation, ...prev].slice(0, 50));
+      activeMutationsRef.current.add(id);
 
       try {
         await onChainSubmit(data);
-        if (!pendingRef.current.has(id)) return;
+        if (!activeMutationsRef.current.has(id)) return;
+        activeMutationsRef.current.delete(id);
         setMutations((prev) =>
           prev.map((m) =>
             m.id === id
@@ -56,7 +57,9 @@ export function useEscrow<TData = unknown>(
           )
         );
       } catch (error) {
-        if (!pendingRef.current.has(id)) return;
+        if (!activeMutationsRef.current.has(id)) return;
+        activeMutationsRef.current.delete(id);
+        await onRollback(data);
         setMutations((prev) =>
           prev.map((m) =>
             m.id === id
@@ -64,25 +67,29 @@ export function useEscrow<TData = unknown>(
               : m
           )
         );
-      } finally {
-        pendingRef.current.delete(id);
       }
     },
-    [onChainSubmit]
+    [onChainSubmit, onRollback]
   );
 
   const rollback = useCallback(
-    async (mutationId: string) => {
-      pendingRef.current.delete(mutationId);
+    (mutationId: string) => {
+      if (!activeMutationsRef.current.has(mutationId)) return;
+
       const target = mutations.find((m) => m.id === mutationId);
-      if (!target || target.status !== "pending") return;
+      if (!target) return;
+
+      activeMutationsRef.current.delete(mutationId);
+
+      onRollback(target.data).catch((err) => {
+        console.error("Failed to execute onRollback side effect:", err);
+      });
 
       setMutations((prev) =>
         prev.map((m) =>
           m.id === mutationId ? { ...m, status: "idle", error: "Rolled back" } : m
         )
       );
-      await onRollback(target.data);
     },
     [mutations, onRollback]
   );
@@ -91,9 +98,42 @@ export function useEscrow<TData = unknown>(
     async (mutationId: string) => {
       const target = mutations.find((m) => m.id === mutationId);
       if (!target || target.status !== "failed") return;
-      await submit(target.data);
+
+      setMutations((prev) =>
+        prev.map((m) =>
+          m.id === mutationId
+            ? { ...m, status: "pending", error: null, submittedAt: Date.now() }
+            : m
+        )
+      );
+
+      activeMutationsRef.current.add(mutationId);
+
+      try {
+        await onChainSubmit(target.data);
+        if (!activeMutationsRef.current.has(mutationId)) return;
+        activeMutationsRef.current.delete(mutationId);
+        setMutations((prev) =>
+          prev.map((m) =>
+            m.id === mutationId
+              ? { ...m, status: "confirmed", confirmedAt: Date.now() }
+              : m
+          )
+        );
+      } catch (error) {
+        if (!activeMutationsRef.current.has(mutationId)) return;
+        activeMutationsRef.current.delete(mutationId);
+        await onRollback(target.data);
+        setMutations((prev) =>
+          prev.map((m) =>
+            m.id === mutationId
+              ? { ...m, status: "failed", error: (error as Error).message }
+              : m
+          )
+        );
+      }
     },
-    [mutations, submit]
+    [mutations, onChainSubmit, onRollback]
   );
 
   return {
