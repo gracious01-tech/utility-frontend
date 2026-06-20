@@ -8,7 +8,7 @@ import {
   useCallback,
   useRef,
 } from "react";
-import { Keypair } from "@stellar/stellar-sdk";
+import type { Keypair } from "@stellar/stellar-sdk";
 import { abortAllRequests } from "@/services/api";
 import { cacheClearByPrefix } from "@/services/cache";
 
@@ -71,7 +71,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (isConnecting) return;
     setIsConnecting(true);
     try {
-      const keypair = Keypair.random();
+      const { Keypair: StellarKeypair } = await import("@stellar/stellar-sdk");
+      const keypair = StellarKeypair.random();
       const address = keypair.publicKey();
       const newAccount: WalletAccount = {
         address,
