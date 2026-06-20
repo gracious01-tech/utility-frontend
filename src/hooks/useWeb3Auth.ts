@@ -36,6 +36,9 @@ export function useWeb3Auth(): UseWeb3AuthReturn {
             keypairRef.current = StellarKeypair.fromSecret(
               localStorage.getItem("utility-auth-secret") || ""
             );
+          }).catch(() => {
+            // Secret is invalid or not available; keypair remains null.
+            // Signing will throw a descriptive error when attempted.
           });
         } else {
           localStorage.removeItem("utility-auth-session");
